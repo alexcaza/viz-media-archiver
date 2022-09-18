@@ -2,31 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/manifoldco/promptui"
 )
-
-/*
-
-	TODOs & Nice to haves:
-
-	-- TODOs
-	1. Split functions up into files
-	2. Refactor request code to better encapsulate
-	3. Main function should have 1–2 fn calls max
-
-	-- NICE TO HAVES
-	1. List all user favourites with their names + ids
-	2. Select chapters from terminal +multiselect
-	3. Download progress bar
-
-*/
 
 type MangaLocation struct {
 	Data string `json:"data"`
@@ -34,11 +23,15 @@ type MangaLocation struct {
 	Ok int `json:"ok"`
 }
 
+type Series struct {
+	Series []string `json:"series"`
+}
+
 func baseUrl() (string) {
 	return "https://api.viz.com"
 }
 
-func formParams(mangaId string) (string) {
+func formParams(mangaId string, deviceId string) (string) {
 	err := godotenv.Load(".env")
 
 	if err != nil {
@@ -58,6 +51,34 @@ func formParams(mangaId string) (string) {
 	v.Add("idfa", "00000000-0000-0000-0000-000000000000")
 
 	return v.Encode()
+}
+
+func fetchSeriesListing(seriesId string) (map[string]interface{}) {
+	var output map[string]interface{}
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", baseUrl() + "/manga/store/series/" + seriesId + "/1/1/8", nil)
+
+	req.Header.Add("X-Devil-Fruit", "7.4.13 gum-gum fruits")
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("User-Agent", "Manga/1 CFNetwork/1335.0.3 Darwin/21.6.0")
+	req.Header.Add("Accept-Language", "en-CA,en-US;q=0.9,en;q=0.8")
+	req.Header.Add("Referer", "com.viz.iphone-manga")
+
+	if err != nil {
+		log.Fatal("Failed to build request. Exiting")
+	}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		log.Fatal("Failed to fetch. Exiting", err)
+	}
+
+	defer resp.Body.Close()
+
+	json.NewDecoder(resp.Body).Decode(&output)
+
+	return output
 }
 
 func createDirsFromPath(path []string) (string) {
@@ -81,10 +102,10 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 	return io.Copy(out, data)
 }
 
-func fetchZipLocation(mangaId string) (MangaLocation){
+func fetchZipLocation(mangaId string, deviceId string) (MangaLocation){
 	var mangaLoc MangaLocation
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", baseUrl() + "/manga/get_manga_url?" + formParams(mangaId), nil)
+	req, err := http.NewRequest("GET", baseUrl() + "/manga/get_manga_url?" + formParams(mangaId, deviceId), nil)
 
 	req.Header.Add("X-Devil-Fruit", "7.4.13 gum-gum fruits")
 	req.Header.Add("Accept", "application/json")
@@ -114,6 +135,8 @@ func fetchZip(zipLocation string) {
 
 	zipResp, _ := http.Get(zipLoc)
 
+	defer zipResp.Body.Close()
+
 	u, _ := url.Parse(zipLoc)
 
 	pathFragments := strings.Split(u.Path, "/")
@@ -128,12 +151,88 @@ func fetchZip(zipLocation string) {
 	}
 }
 
+func getSeriesInfo() ([]string) {
+	var output Series
+	seriesJSON, err := os.Open("series.json")
+
+	if err != nil {
+		log.Fatal("Failed to open series.json. Make sure the file is present!")
+	}
+
+	defer seriesJSON.Close()
+
+	seriesBytes, _ := ioutil.ReadAll(seriesJSON)
+
+	json.Unmarshal(seriesBytes, &output)
+
+	return output.Series
+}
+
 func main() {
+	prompt := promptui.Select{
+		Label: "Select series to download chapters from",
+		Items: getSeriesInfo(),
+	}
 
-	// TODO: Bring this in from ARGV or selection
-	mangaId := "23065"
+	_, result, err := prompt.Run()
 
-	mangaLoc := fetchZipLocation(mangaId)
+	if err != nil {
+		log.Fatal("Failed to get selection from prompt")
+	}
+
+	selectionNumber := strings.TrimSpace(strings.Split(result, "|")[1])
+
+	fmt.Printf("Selection: %q\n", result)
+
+	output := fetchSeriesListing(selectionNumber)
+
+	fetchOk := output["ok"].(float64)
+
+
+	if fetchOk != 1 {
+		log.Fatal("Failed to get data for selected series.")
+	}
+
+	data := output["data"].([]interface{})
+
+	var chapters []map[string]interface{}
+	for _, v := range data {
+		manga := v.(map[string]interface{})["manga"].(map[string]interface{})
+		if manga["web_price"] == nil && manga["published"] == true {
+			chapters = append(chapters, manga)
+		}
+	}
+
+	sort.Slice(chapters, func(i, j int) bool {
+		d1, _ := time.Parse(time.RFC3339, chapters[i]["publication_date"].(string))
+		d2, _ := time.Parse(time.RFC3339, chapters[j]["publication_date"].(string))
+		return d1.After(d2)
+	})
+
+	var t []string
+	for _, v := range chapters {
+		chapterNum := v["chapter"].(string)
+		id := v["manga_common_id"].(float64)
+		deviceId := v["device_id"].(float64)
+		t = append(t, chapterNum + " " + "| ("+fmt.Sprintf("%.0f", id)+"~"+fmt.Sprintf("%.0f", deviceId)+")")
+	}
+
+	prompt = promptui.Select{
+		Label: "Which chapter do you want to download?",
+		Items: t,
+	}
+
+	_, result, err = prompt.Run()
+
+	if err != nil {
+		log.Fatal("Chapter selection failed.")
+	}
+
+	fetchData := strings.Split(strings.Split(result, "|")[1], "~")
+	chapterId := strings.Trim(strings.TrimSpace(fetchData[0]), "()")
+	deviceId := strings.Trim(strings.TrimSpace(fetchData[1]), "()")
+
+	mangaLoc := fetchZipLocation(chapterId, deviceId)
 	fetchZip(mangaLoc.Data)
 
 }
