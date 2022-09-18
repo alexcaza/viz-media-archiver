@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -161,7 +160,7 @@ func getSeriesInfo() ([]string) {
 
 	defer seriesJSON.Close()
 
-	seriesBytes, _ := ioutil.ReadAll(seriesJSON)
+	seriesBytes, _ := io.ReadAll(seriesJSON)
 
 	json.Unmarshal(seriesBytes, &output)
 
