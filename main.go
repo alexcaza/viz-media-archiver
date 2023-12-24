@@ -30,6 +30,16 @@ func baseUrl() (string) {
 	return "https://api.viz.com"
 }
 
+func setNecessaryHeaders(req *http.Request) (*http.Request) {
+	req.Header.Add("X-Devil-Fruit", "5.5.7 gum-gum fruits")
+	req.Header.Add("Accept", "*/*")
+	req.Header.Add("User-Agent", "Weekly%20Shonen%20Jump/1 CFNetwork/1490.0.4 Darwin/23.2.0")
+	req.Header.Add("Accept-Language", "en-CA,en-US;q=0.9,en;q=0.8")
+	req.Header.Add("Referer", "com.viz.wsj")
+
+    return req
+}
+
 func formParams(mangaId string, deviceId string) (string) {
 	err := godotenv.Load(".env")
 
