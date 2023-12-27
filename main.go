@@ -51,13 +51,20 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 
 	defer out.Close()
 
+	// TODO: Add unzipping and better file structure
+	// so that it could be easily served from a website statically.
+
 	return io.Copy(out, data)
 }
 
 func fetchZip(zipLocation string) {
 	zipLoc := zipLocation
 
-	zipResp, _ := http.Get(zipLoc)
+	zipResp, httpErr := http.Get(zipLoc)
+
+	if httpErr != nil {
+		log.Fatal(httpErr)
+	}
 
 	defer zipResp.Body.Close()
 
@@ -68,9 +75,9 @@ func fetchZip(zipLocation string) {
 	outputPath := createDirsFromPath(pathFragments)
 	filePath := outputPath + "/" + fileName
 
-	_, err := writeZip(filePath, zipResp.Body)
+	_, writeErr := writeZip(filePath, zipResp.Body)
 
-	if err != nil {
+	if writeErr != nil {
 		log.Fatalf("Failed to write file (%s) to disk.", filePath)
 	}
 }
@@ -148,15 +155,13 @@ func addToWatch(items []WatchListItem) {
 			log.Fatal("JSON err:", jsonErr)
 		}
 	}
-	log.Println("list:", watchingList)
 	for _, item := range items {
-		log.Println(item)
 		if len(watchingList) < 1 {
 			watchingList = append(watchingList, item)
 			continue
 		}
-		for _, watching := range watchingList {
-			log.Println("watching:", watching)
+
+		for range watchingList {
 			if !slices.Contains(watchingList, item) {
 				watchingList = append(watchingList, item)
 			}
@@ -176,15 +181,27 @@ func updateWatchList(api api.Api) {
 	json.Unmarshal(bytes, &watchList)
 	// Need to check watch list, look at latest chapter in dir
 	// then find all missing chapters
+	log.Println("Starting downloads...")
 	for _, item := range watchList {
+		log.Printf("Fetching manga %s\n", item.Title)
 		listings := api.FetchSeriesChapters(item.Id)
 		sort.Slice(listings.Data, func(i, j int) bool {
 			d1, _ := time.Parse(time.RFC3339, listings.Data[i].Manga.PublicationDate)
 			d2, _ := time.Parse(time.RFC3339, listings.Data[j].Manga.PublicationDate)
 			return d1.After(d2)
 		})
-		location := api.FetchZipLocation(strconv.Itoa(listings.Data[0].Manga.MangaCommonId))
-		fetchZip(location.Data)
+		for _, chapter := range listings.Data {
+			if !chapter.Manga.Published && chapter.Manga.WebPrice != "" {
+				continue
+			}
+
+			log.Printf("Getting chapter %s (id: %d)\n", chapter.Manga.Chapter, chapter.Manga.MangaCommonId)
+			location := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
+			fetchZip(location.Data)
+			// Wait 5s before downloading next chapter
+			time.Sleep(5 * time.Second)
+		}
+
 	}
 }
 
