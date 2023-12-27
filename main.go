@@ -57,7 +57,7 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 	return io.Copy(out, data)
 }
 
-func fetchZip(zipLocation string) {
+func fetchZip(zipLocation string, mangaTitle string) {
 	zipLoc := zipLocation
 
 	zipResp, httpErr := http.Get(zipLoc)
@@ -72,7 +72,8 @@ func fetchZip(zipLocation string) {
 
 	pathFragments := strings.Split(u.Path, "/")
 	fileName := pathFragments[len(pathFragments)-1]
-	outputPath := createDirsFromPath(pathFragments)
+	path := []string{mangaTitle, fileName}
+	outputPath := createDirsFromPath(path)
 	filePath := outputPath + "/" + fileName
 
 	_, writeErr := writeZip(filePath, zipResp.Body)
@@ -191,13 +192,13 @@ func updateWatchList(api api.Api) {
 			return d1.After(d2)
 		})
 		for _, chapter := range listings.Data {
-			if !chapter.Manga.Published && chapter.Manga.WebPrice != "" {
+			if !chapter.Manga.Published {
 				continue
 			}
 
 			log.Printf("Getting chapter %s (id: %d)\n", chapter.Manga.Chapter, chapter.Manga.MangaCommonId)
 			location := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
-			fetchZip(location.Data)
+			fetchZip(location.Data, item.Title)
 			// Wait 5s before downloading next chapter
 			time.Sleep(5 * time.Second)
 		}
