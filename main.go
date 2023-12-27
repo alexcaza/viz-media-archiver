@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"slices"
 	"sort"
@@ -34,7 +35,7 @@ var args struct {
 }
 
 func createDirsFromPath(path []string) string {
-	dirPath := "./data" + strings.Join(path[:len(path)-1], "/")
+	dirPath := "./data" + strings.Join(path, "/")
 	err := os.MkdirAll(dirPath, os.ModePerm)
 	if err != nil {
 		log.Fatalf("Failed to created path %s", dirPath)
@@ -51,13 +52,26 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 
 	defer out.Close()
 
-	// TODO: Add unzipping and better file structure
-	// so that it could be easily served from a website statically.
+	// Write zip to disk before trying to open it again
+	io.Copy(out, data)
 
-	return io.Copy(out, data)
+	archive, err := zip.OpenReader(path)
+
+	pathFragments := strings.Split(path, "/")
+	folderPath := strings.Join(pathFragments[:len(pathFragments)-1], "/")
+
+	defer archive.Close()
+
+	for i, f := range archive.File {
+		extension := strings.Split(f.Name, ".")[1]
+		diskFile, _ := os.Create(folderPath + "/" + strconv.Itoa(i) + "." + extension)
+		archiveFile, _ := f.Open()
+		io.Copy(diskFile, archiveFile)
+	}
+	return 0, err
 }
 
-func fetchZip(zipLocation string, mangaTitle string) {
+func fetchZip(zipLocation string, mangaTitle string, chapterId string) {
 	zipLoc := zipLocation
 
 	zipResp, httpErr := http.Get(zipLoc)
@@ -72,8 +86,10 @@ func fetchZip(zipLocation string, mangaTitle string) {
 
 	pathFragments := strings.Split(u.Path, "/")
 	fileName := pathFragments[len(pathFragments)-1]
-	path := []string{mangaTitle, fileName}
+	// TODO: Fix this pathing
+	path := []string{"", mangaTitle, chapterId}
 	outputPath := createDirsFromPath(path)
+	log.Println(outputPath)
 	filePath := outputPath + "/" + fileName
 
 	_, writeErr := writeZip(filePath, zipResp.Body)
@@ -198,7 +214,7 @@ func updateWatchList(api api.Api) {
 
 			log.Printf("Getting chapter %s (id: %d)\n", chapter.Manga.Chapter, chapter.Manga.MangaCommonId)
 			location := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
-			fetchZip(location.Data, item.Title)
+			fetchZip(location.Data, item.Title, chapter.Manga.Chapter)
 			// Wait 5s before downloading next chapter
 			time.Sleep(5 * time.Second)
 		}
