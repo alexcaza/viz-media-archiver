@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"slices"
+	"sort"
+
 	// "fmt"
 	"io"
 	"log"
@@ -87,7 +89,7 @@ func buildSeriesList(api api.Api) {
 	encoder := json.NewEncoder(file)
 
 	for id < MAX_ID {
-		output := api.FetchSeriesListing(strconv.Itoa(id))
+		output := api.FetchSeriesChapters(strconv.Itoa(id))
 		if output.Data == nil {
 			log.Printf("The id %d doesn't exist. Skipping...", id)
 			id++
@@ -167,12 +169,23 @@ func addToWatch(items []WatchListItem) {
 	}
 }
 
-func updateWatchList() {
+func updateWatchList(api api.Api) {
 	var watchList []WatchListItem
 	contents, _ := os.Open("to-watch.json")
 	bytes, _ := io.ReadAll(contents)
 	json.Unmarshal(bytes, &watchList)
-
+	// Need to check watch list, look at latest chapter in dir
+	// then find all missing chapters
+	for _, item := range watchList {
+		listings := api.FetchSeriesChapters(item.Id)
+		sort.Slice(listings.Data, func(i, j int) bool {
+			d1, _ := time.Parse(time.RFC3339, listings.Data[i].Manga.PublicationDate)
+			d2, _ := time.Parse(time.RFC3339, listings.Data[j].Manga.PublicationDate)
+			return d1.After(d2)
+		})
+		location := api.FetchZipLocation(strconv.Itoa(listings.Data[0].Manga.MangaCommonId))
+		fetchZip(location.Data)
+	}
 }
 
 func main() {
@@ -197,7 +210,7 @@ func main() {
 	}
 
 	// Check for updates and download files
-	updateWatchList()
+	updateWatchList(api)
 
 	// prompt := promptui.Select{
 	// 	Label: "Select series to download chapters from",
