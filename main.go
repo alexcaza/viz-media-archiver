@@ -21,17 +21,13 @@ import (
 	// "github.com/manifoldco/promptui"
 )
 
-type Series struct {
-	Series []string `json:"series"`
-}
-
-type SeriesListItem struct {
+type WatchListItem struct {
 	Title string `json:"title"`
 	Id    string `json:"id"`
 }
 
 var args struct {
-	GenListing bool  `arg:"--generate-listing" help:"Generates list of series"`
+	GenListing bool  `arg:"--generate-listing" help:"Generates list of series."`
 	AddToWatch []int `arg:"--to-watch" help:"Adds ids to list of series to watch. Must be in series-list.json"`
 }
 
@@ -77,23 +73,6 @@ func fetchZip(zipLocation string) {
 	}
 }
 
-func getSeriesInfo() []string {
-	var output Series
-	seriesJSON, err := os.Open("series.json")
-
-	if err != nil {
-		log.Fatal("Failed to open series.json. Make sure the file is present!")
-	}
-
-	defer seriesJSON.Close()
-
-	seriesBytes, _ := io.ReadAll(seriesJSON)
-
-	json.Unmarshal(seriesBytes, &output)
-
-	return output.Series
-}
-
 func buildSeriesList(api api.Api) {
 	log.Println("Starting to fetch.")
 	MAX_ID := 1000
@@ -101,7 +80,7 @@ func buildSeriesList(api api.Api) {
 	// we don't always start from 1
 	id := 1
 	sleepTime := 1 * time.Second
-	var series []SeriesListItem
+	var series []WatchListItem
 
 	file, _ := os.OpenFile("series-list.json", os.O_WRONLY, os.ModeAppend)
 	defer file.Close()
@@ -122,7 +101,7 @@ func buildSeriesList(api api.Api) {
 		first := data[0]
 		seriesTitle := first.Manga.SeriesTitle
 		log.Printf("Found series at %d; Name: %s\n", id, seriesTitle)
-		series = append(series, SeriesListItem{Title: seriesTitle, Id: strconv.Itoa(id)})
+		series = append(series, WatchListItem{Title: seriesTitle, Id: strconv.Itoa(id)})
 		id++
 
 		// Wait n seconds before trying the next id
@@ -136,8 +115,8 @@ func buildSeriesList(api api.Api) {
 	}
 }
 
-func getSeriesList() []SeriesListItem {
-	var seriesList []SeriesListItem
+func getSeriesList() []WatchListItem {
+	var seriesList []WatchListItem
 	file, fileerr := os.ReadFile("series-list.json")
 	if fileerr != nil {
 		log.Fatal(fileerr)
@@ -150,8 +129,8 @@ func getSeriesList() []SeriesListItem {
 	return seriesList
 }
 
-func addToWatch(items []SeriesListItem) {
-	var watchingList []SeriesListItem
+func addToWatch(items []WatchListItem) {
+	var watchingList []WatchListItem
 	// Get contents
 	contents, _ := os.Open("to-watch.json")
 	bytes, _ := io.ReadAll(contents)
@@ -188,6 +167,14 @@ func addToWatch(items []SeriesListItem) {
 	}
 }
 
+func updateWatchList() {
+	var watchList []WatchListItem
+	contents, _ := os.Open("to-watch.json")
+	bytes, _ := io.ReadAll(contents)
+	json.Unmarshal(bytes, &watchList)
+
+}
+
 func main() {
 	goarg.MustParse(&args)
 	api := api.NewApi()
@@ -198,7 +185,7 @@ func main() {
 
 	if len(args.AddToWatch) > 0 {
 		seriesList := getSeriesList()
-		var toWatch []SeriesListItem
+		var toWatch []WatchListItem
 		for _, id := range args.AddToWatch {
 			for _, seriesListItem := range seriesList {
 				if seriesListItem.Id == strconv.Itoa(id) {
@@ -208,6 +195,10 @@ func main() {
 		}
 		addToWatch(toWatch)
 	}
+
+	// Check for updates and download files
+	updateWatchList()
+
 	// prompt := promptui.Select{
 	// 	Label: "Select series to download chapters from",
 	// 	Items: getSeriesInfo(),
