@@ -2,23 +2,37 @@ package main
 
 import (
 	"encoding/json"
+	"slices"
 	// "fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+
 	// "sort"
 	"strconv"
 	"strings"
 	"time"
 
 	api "viz-media/viz_api"
+
+	goarg "github.com/alexflint/go-arg"
 	// "github.com/manifoldco/promptui"
 )
 
 type Series struct {
 	Series []string `json:"series"`
+}
+
+type SeriesListItem struct {
+	Title string `json:"title"`
+	Id    string `json:"id"`
+}
+
+var args struct {
+	GenListing bool  `arg:"--generate-listing" help:"Generates list of series"`
+	AddToWatch []int `arg:"--to-watch" help:"Adds ids to list of series to watch. Must be in series-list.json"`
 }
 
 func createDirsFromPath(path []string) string {
@@ -80,50 +94,120 @@ func getSeriesInfo() []string {
 	return output.Series
 }
 
-type SeriesListItem struct {
-	Title string `json:"title"`
-	Id    string `json:"id"`
-}
-
 func buildSeriesList(api api.Api) {
-	log.Println("Starting to fetch...")
+	log.Println("Starting to fetch.")
+	MAX_ID := 1000
+	// TODO: Get the latest id in the json file so that
+	// we don't always start from 1
+	id := 1
+	sleepTime := 1 * time.Second
 	var series []SeriesListItem
 
 	file, _ := os.OpenFile("series-list.json", os.O_WRONLY, os.ModeAppend)
 	defer file.Close()
 	encoder := json.NewEncoder(file)
 
-	// TODO: Get the latest id in the json file so that
-	// we don't always start from 1
-	i := 1
-	for i < 10 {
-		output := api.FetchSeriesListing(strconv.Itoa(i))
+	for id < MAX_ID {
+		output := api.FetchSeriesListing(strconv.Itoa(id))
 		if output.Data == nil {
-			log.Println("No output: ", output)
-			i++
-			// Wait 5s before trying the next id
-			time.Sleep(5 * time.Second)
+			log.Printf("The id %d doesn't exist. Skipping...", id)
+			id++
+
+			// Wait n seconds before trying the next id
+			time.Sleep(sleepTime)
 			continue
 		}
 		data := output.Data
 
 		first := data[0]
 		seriesTitle := first.Manga.SeriesTitle
-		series = append(series, SeriesListItem{Title: seriesTitle, Id: strconv.Itoa(i)})
-		// Wait 5s before trying the next id
-		time.Sleep(5 * time.Second)
-		i += 1
+		log.Printf("Found series at %d; Name: %s\n", id, seriesTitle)
+		series = append(series, SeriesListItem{Title: seriesTitle, Id: strconv.Itoa(id)})
+		id++
+
+		// Wait n seconds before trying the next id
+		time.Sleep(sleepTime)
 	}
 
 	err := encoder.Encode(series)
+	log.Printf("Finished! Found %d titles.\n", len(series))
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
+func getSeriesList() []SeriesListItem {
+	var seriesList []SeriesListItem
+	file, fileerr := os.ReadFile("series-list.json")
+	if fileerr != nil {
+		log.Fatal(fileerr)
+	}
+
+	err := json.Unmarshal(file, &seriesList)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return seriesList
+}
+
+func addToWatch(items []SeriesListItem) {
+	var watchingList []SeriesListItem
+	// Get contents
+	contents, _ := os.Open("to-watch.json")
+	bytes, _ := io.ReadAll(contents)
+
+	// Open file for writing and truncate
+	file, _ := os.Create("to-watch.json")
+	defer file.Close()
+	encoder := json.NewEncoder(file)
+
+	if len(bytes) > 0 {
+		jsonErr := json.Unmarshal(bytes, &watchingList)
+		if jsonErr != nil {
+			log.Fatal("JSON err:", jsonErr)
+		}
+	}
+	log.Println("list:", watchingList)
+	for _, item := range items {
+		log.Println(item)
+		if len(watchingList) < 1 {
+			watchingList = append(watchingList, item)
+			continue
+		}
+		for _, watching := range watchingList {
+			log.Println("watching:", watching)
+			if !slices.Contains(watchingList, item) {
+				watchingList = append(watchingList, item)
+			}
+		}
+	}
+
+	err := encoder.Encode(watchingList)
+	if err != nil {
+		log.Fatal("Encoding error:", err)
+	}
+}
+
 func main() {
+	goarg.MustParse(&args)
 	api := api.NewApi()
-	buildSeriesList(api)
+
+	if args.GenListing {
+		buildSeriesList(api)
+	}
+
+	if len(args.AddToWatch) > 0 {
+		seriesList := getSeriesList()
+		var toWatch []SeriesListItem
+		for _, id := range args.AddToWatch {
+			for _, seriesListItem := range seriesList {
+				if seriesListItem.Id == strconv.Itoa(id) {
+					toWatch = append(toWatch, seriesListItem)
+				}
+			}
+		}
+		addToWatch(toWatch)
+	}
 	// prompt := promptui.Select{
 	// 	Label: "Select series to download chapters from",
 	// 	Items: getSeriesInfo(),
