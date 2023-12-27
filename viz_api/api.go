@@ -34,7 +34,7 @@ type MangaData struct {
 		ListPrice           string `json:"list_price"`
 		MangaCommonId       int    `json:"manga_common_id"`
 		MangaSeriesCommonId int    `json:"manga_series_common_id"`
-		MidrollPage         string `json:"midroll_page"`
+		MidrollPage         int    `json:"midroll_page"`
 		ModTs               int    `json:"mod_ts"`
 		New                 bool   `json:"new"`
 		NewFollowing        string `json:"new_following"`
