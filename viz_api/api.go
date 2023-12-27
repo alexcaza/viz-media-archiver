@@ -71,10 +71,15 @@ type MangaData struct {
 	} `json:"manga"`
 }
 
-type MangaLocation struct {
+type Manga struct {
 	Data     []MangaData `json:"data"`
 	Filesize int         `json:"filesize"`
 	Ok       int         `json:"ok"`
+}
+
+type MangaZip struct {
+	Data string `json:"data"`
+	Ok   int    `json:"ok"`
 }
 
 type Api struct {
@@ -93,7 +98,7 @@ func (a Api) setNecessaryHeaders(req *http.Request) *http.Request {
 
 	return req
 }
-func (a Api) buildFormParams(mangaId string, deviceId string) string {
+func (a Api) buildFormParams(chapterId string) string {
 	err := godotenv.Load(".env")
 
 	if err != nil {
@@ -104,18 +109,19 @@ func (a Api) buildFormParams(mangaId string, deviceId string) string {
 	v := url.Values{}
 	v.Add("instance_id", os.Getenv("INSTANCE_ID"))
 	v.Add("device_id", os.Getenv("DEVICE_ID"))
-	v.Add("manga_id", mangaId)
-	v.Add("viz_app_id", "1")
+	v.Add("manga_id", chapterId)
+	v.Add("viz_app_id", "3")
 	v.Add("trust_user_jwt", os.Getenv("USER_JWT"))
 	v.Add("user_id", os.Getenv("USER_ID"))
-	v.Add("version", "8")
+	v.Add("version", "9")
 	v.Add("metadata", "true")
+	v.Add("page", "1")
 	v.Add("idfa", "00000000-0000-0000-0000-000000000000")
 
 	return v.Encode()
 }
-func (a Api) FetchSeriesListing(seriesId string) MangaLocation {
-	var output MangaLocation
+func (a Api) FetchSeriesChapters(seriesId string) Manga {
+	var output Manga
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", a.baseUrl+"/manga/store/series/"+seriesId+"/1/1/8", nil)
 
@@ -142,10 +148,10 @@ func (a Api) FetchSeriesListing(seriesId string) MangaLocation {
 
 	return output
 }
-func (a Api) FetchZipLocation(mangaId string, deviceId string) MangaLocation {
-	var mangaLoc MangaLocation
+func (a Api) FetchZipLocation(chapterId string) MangaZip {
+	var mangaZip MangaZip
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", a.baseUrl+"/manga/get_manga_url?"+a.buildFormParams(mangaId, deviceId), nil)
+	req, err := http.NewRequest("GET", a.baseUrl+"/manga/get_manga_url?"+a.buildFormParams(chapterId), nil)
 
 	a.setNecessaryHeaders(req)
 
@@ -161,7 +167,7 @@ func (a Api) FetchZipLocation(mangaId string, deviceId string) MangaLocation {
 
 	defer resp.Body.Close()
 
-	json.NewDecoder(resp.Body).Decode(&mangaLoc)
+	json.NewDecoder(resp.Body).Decode(&mangaZip)
 
-	return mangaLoc
+	return mangaZip
 }
