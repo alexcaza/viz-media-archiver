@@ -115,7 +115,6 @@ func (a Api) buildFormParams(chapterId string) string {
 	v.Add("user_id", os.Getenv("USER_ID"))
 	v.Add("version", "9")
 	v.Add("metadata", "true")
-	v.Add("page", "1")
 	v.Add("idfa", "00000000-0000-0000-0000-000000000000")
 
 	return v.Encode()
