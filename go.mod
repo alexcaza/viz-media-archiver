@@ -1,6 +1,6 @@
 module viz-media
 
-go 1.19
+go 1.21
 
 require (
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
