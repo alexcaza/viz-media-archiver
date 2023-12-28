@@ -149,9 +149,9 @@ func buildSeriesList(api api.Api) {
 
 func getSeriesList() []WatchListItem {
 	var seriesList []WatchListItem
-	file, fileerr := os.ReadFile("series-list.json")
-	if fileerr != nil {
-		log.Fatal(fileerr)
+	file, fileErr := os.ReadFile("series-list.json")
+	if fileErr != nil {
+		log.Fatal(fileErr)
 	}
 
 	err := json.Unmarshal(file, &seriesList)
