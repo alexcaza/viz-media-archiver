@@ -218,6 +218,11 @@ func updateWatchList(api api.Api) {
 	bytes, _ := io.ReadAll(contents)
 	sleepTime := 5 * time.Second
 	json.Unmarshal(bytes, &watchList)
+
+	if len(watchList) < 1 {
+		log.Fatalln("Your watchlist is empty! Please add ids from `series-list.json` by using the --to-watch argument")
+	}
+
 	// Need to check watch list, look at latest chapter in dir
 	// then find all missing chapters
 	log.Println("Starting downloads...")
