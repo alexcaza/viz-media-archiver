@@ -3,25 +3,18 @@ package main
 import (
 	"archive/zip"
 	"encoding/json"
-	"slices"
-	"sort"
-
-	// "fmt"
+	goarg "github.com/alexflint/go-arg"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-
-	// "sort"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
-
 	api "viz-media/viz_api"
-
-	goarg "github.com/alexflint/go-arg"
-	// "github.com/manifoldco/promptui"
 )
 
 type WatchListItem struct {
@@ -296,71 +289,4 @@ func main() {
 
 	// Check for updates and download files
 	updateWatchList(api)
-
-	// prompt := promptui.Select{
-	// 	Label: "Select series to download chapters from",
-	// 	Items: getSeriesInfo(),
-	// }
-	//
-	// _, result, err := prompt.Run()
-	//
-	// if err != nil {
-	// 	log.Fatal("Failed to get selection from prompt")
-	// }
-	//
-	// selectionNumber := strings.TrimSpace(strings.Split(result, "|")[1])
-	//
-	// fmt.Printf("Selection: %q\n", result)
-	//
-	// output := fetchSeriesListing(selectionNumber)
-	//
-	// fetchOk := output["ok"].(float64)
-	//
-	//
-	// if fetchOk != 1 {
-	// 	log.Fatal("Failed to get data for selected series.")
-	// }
-	//
-	// data := output["data"].([]interface{})
-	//
-	// var chapters []map[string]interface{}
-	// for _, v := range data {
-	// 	manga := v.(map[string]interface{})["manga"].(map[string]interface{})
-	// 	if manga["web_price"] == nil && manga["published"] == true {
-	// 		chapters = append(chapters, manga)
-	// 	}
-	// }
-	//
-	// sort.Slice(chapters, func(i, j int) bool {
-	// 	d1, _ := time.Parse(time.RFC3339, chapters[i]["publication_date"].(string))
-	// 	d2, _ := time.Parse(time.RFC3339, chapters[j]["publication_date"].(string))
-	// 	return d1.After(d2)
-	// })
-	//
-	// var t []string
-	// for _, v := range chapters {
-	// 	chapterNum := v["chapter"].(string)
-	// 	id := v["manga_common_id"].(float64)
-	// 	deviceId := v["device_id"].(float64)
-	// 	t = append(t, chapterNum + " " + "| ("+fmt.Sprintf("%.0f", id)+"~"+fmt.Sprintf("%.0f", deviceId)+")")
-	// }
-	//
-	// prompt = promptui.Select{
-	// 	Label: "Which chapter do you want to download?",
-	// 	Items: t,
-	// }
-	//
-	// _, result, err = prompt.Run()
-	//
-	// if err != nil {
-	// 	log.Fatal("Chapter selection failed.")
-	// }
-	//
-	// fetchData := strings.Split(strings.Split(result, "|")[1], "~")
-	// chapterId := strings.Trim(strings.TrimSpace(fetchData[0]), "()")
-	// deviceId := strings.Trim(strings.TrimSpace(fetchData[1]), "()")
-	//
-	// mangaLoc := fetchZipLocation(chapterId, deviceId)
-	// fetchZip(mangaLoc.Data)
-	//
 }
