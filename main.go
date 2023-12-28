@@ -107,6 +107,7 @@ func fetchZip(zipLocation string, mangaTitle string, chapterId string) {
 
 func buildSeriesList(api api.Api) {
 	log.Println("Starting to fetch.")
+	var seriesList []WatchListItem
 	const MAX_ID = 1000
 	// TODO: Get the latest id in the json file so that
 	// we don't always start from 1
@@ -117,6 +118,19 @@ func buildSeriesList(api api.Api) {
 	file, _ := os.OpenFile("series-list.json", os.O_WRONLY, os.ModeAppend)
 	defer file.Close()
 	encoder := json.NewEncoder(file)
+
+	seriesListFile, _ := os.ReadFile("series-list.json")
+	json.Unmarshal(seriesListFile, &seriesList)
+
+	if len(seriesList) > 0 {
+		sort.Slice(seriesList, func(i int, j int) bool {
+			id1, _ := strconv.ParseInt(seriesList[i].Id, 10, 32)
+			id2, _ := strconv.ParseInt(seriesList[j].Id, 10, 32)
+			return id1 > id2
+		})
+		lastSeriesId, _ := strconv.Atoi(seriesList[0].Id)
+		id = lastSeriesId
+	}
 
 	for id < MAX_ID {
 		output := api.FetchSeriesChapters(strconv.Itoa(id))
