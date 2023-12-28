@@ -25,8 +25,9 @@ import (
 )
 
 type WatchListItem struct {
-	Title string `json:"title"`
-	Id    string `json:"id"`
+	Title         string `json:"title"`
+	Id            string `json:"id"`
+	LatestChapter string `json:"latestChapter"`
 }
 
 var args struct {
@@ -155,7 +156,8 @@ func getSeriesList() []WatchListItem {
 	return seriesList
 }
 
-func addToWatch(items []WatchListItem) {
+// TODO: Make this more efficient and do a proper field merge.
+func upsertWatchListJSON(items []WatchListItem) {
 	var watchingList []WatchListItem
 	// Get contents
 	contents, _ := os.Open("to-watch.json")
@@ -179,8 +181,20 @@ func addToWatch(items []WatchListItem) {
 		}
 
 		for range watchingList {
-			if !slices.Contains(watchingList, item) {
+			// If slice doesn't contain this id already
+			if !slices.ContainsFunc(watchingList, func(a WatchListItem) bool {
+				return a.Id == item.Id
+			}) {
 				watchingList = append(watchingList, item)
+			} else {
+				index := slices.IndexFunc(watchingList, func(a WatchListItem) bool {
+					return a.Id == item.Id
+				})
+
+				// If the latest chapters don't match, we're probably upserting it.
+				if watchingList[index].LatestChapter != item.LatestChapter && item.LatestChapter != "" {
+					watchingList[index] = item
+				}
 			}
 		}
 	}
@@ -200,27 +214,49 @@ func updateWatchList(api api.Api) {
 	// Need to check watch list, look at latest chapter in dir
 	// then find all missing chapters
 	log.Println("Starting downloads...")
-	for _, item := range watchList {
+	for i := 0; i < len(watchList); i++ {
+		// Later in the function, item will be mutated
+		// so we need the reference to the object in memory
+		item := &watchList[i]
 		log.Printf("Fetching manga %s\n", item.Title)
 		listings := api.FetchSeriesChapters(item.Id)
+		// Sort by oldest first
 		sort.Slice(listings.Data, func(i, j int) bool {
 			d1, _ := time.Parse(time.RFC3339, listings.Data[i].Manga.PublicationDate)
 			d2, _ := time.Parse(time.RFC3339, listings.Data[j].Manga.PublicationDate)
-			return d1.After(d2)
+			return d1.Before(d2)
 		})
-		for _, chapter := range listings.Data {
+		for i, chapter := range listings.Data {
+			chapterAsFloat, _ := strconv.ParseFloat(chapter.Manga.Chapter, 32)
+			latestChapterAsFloat, _ := strconv.ParseFloat(item.LatestChapter, 32)
+
 			if !chapter.Manga.Published {
+				log.Printf("Chapter isn't published (%s)\n", chapter.Manga.Chapter)
+				continue
+			}
+
+			if chapterAsFloat <= latestChapterAsFloat {
+				log.Printf("Skipping because chapter already downloaded. Latest chapter (%.1f) >= current chapter (%.1f)", latestChapterAsFloat, chapterAsFloat)
 				continue
 			}
 
 			log.Printf("Getting chapter %s (id: %d)\n", chapter.Manga.Chapter, chapter.Manga.MangaCommonId)
 			location := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
 			fetchZip(location.Data, item.Title, chapter.Manga.Chapter)
+
+			// Update to item with latest chapter data
+			// to be written to disk outside of both iterations
+			if i == len(listings.Data)-1 {
+				item.LatestChapter = chapter.Manga.Chapter
+			}
+
 			// Wait 5s before downloading next chapter
 			time.Sleep(sleepTime)
 		}
 
 	}
+
+	upsertWatchListJSON(watchList)
 }
 
 func main() {
@@ -241,7 +277,7 @@ func main() {
 				}
 			}
 		}
-		addToWatch(toWatch)
+		upsertWatchListJSON(toWatch)
 	}
 
 	// Check for updates and download files
