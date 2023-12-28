@@ -166,7 +166,10 @@ func (a Api) FetchZipLocation(chapterId string) MangaZip {
 
 	defer resp.Body.Close()
 
-	json.NewDecoder(resp.Body).Decode(&mangaZip)
+	decodeErr := json.NewDecoder(resp.Body).Decode(&mangaZip)
+	if decodeErr != nil {
+		log.Fatalln("Failed to decode manga zip with: ", decodeErr)
+	}
 
 	return mangaZip
 }
