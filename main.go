@@ -101,7 +101,7 @@ func fetchZip(zipLocation string, mangaTitle string, chapterId string) {
 
 func buildSeriesList(api api.Api) {
 	log.Println("Starting to fetch.")
-	MAX_ID := 1000
+	const MAX_ID = 1000
 	// TODO: Get the latest id in the json file so that
 	// we don't always start from 1
 	id := 1
