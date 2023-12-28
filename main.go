@@ -63,10 +63,22 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 
 	defer archive.Close()
 
-	for i, f := range archive.File {
+	jpgIndex := 0
+	for _, f := range archive.File {
 		extension := strings.Split(f.Name, ".")[1]
-		diskFile, _ := os.Create(folderPath + "/" + strconv.Itoa(i) + "." + extension)
+		var fileName string
+		switch extension {
+		case "jpg":
+			fileName = strconv.Itoa(jpgIndex) + "." + extension
+			jpgIndex++
+		case "json":
+			fileName = "metadata" + "." + extension
+		default:
+			fileName = f.Name
+		}
+
 		archiveFile, _ := f.Open()
+		diskFile, _ := os.Create(folderPath + "/" + fileName)
 		io.Copy(diskFile, archiveFile)
 	}
 	return 0, err
@@ -205,6 +217,8 @@ func upsertWatchListJSON(items []WatchListItem) {
 	}
 }
 
+// TODO: Make this more efficient;
+// Allow for starting from start or end?
 func updateWatchList(api api.Api) {
 	var watchList []WatchListItem
 	contents, _ := os.Open("to-watch.json")
