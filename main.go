@@ -195,6 +195,7 @@ func updateWatchList(api api.Api) {
 	var watchList []WatchListItem
 	contents, _ := os.Open("to-watch.json")
 	bytes, _ := io.ReadAll(contents)
+	sleepTime := 5 * time.Second
 	json.Unmarshal(bytes, &watchList)
 	// Need to check watch list, look at latest chapter in dir
 	// then find all missing chapters
@@ -216,7 +217,7 @@ func updateWatchList(api api.Api) {
 			location := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
 			fetchZip(location.Data, item.Title, chapter.Manga.Chapter)
 			// Wait 5s before downloading next chapter
-			time.Sleep(5 * time.Second)
+			time.Sleep(sleepTime)
 		}
 
 	}
