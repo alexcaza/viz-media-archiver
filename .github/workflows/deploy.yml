@@ -22,6 +22,6 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.HOST_USER }}
           key: ${{ secrets.DO_SSH }}
-          source: "viz-media, templates/*.html"
+          source: "viz-media, series-list.json"
           target: /root/viz-archiver-website
 
