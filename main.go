@@ -3,24 +3,27 @@ package main
 import (
 	"archive/zip"
 	"encoding/json"
-	goarg "github.com/alexflint/go-arg"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 	api "viz-media/viz_api"
+
+	goarg "github.com/alexflint/go-arg"
 )
 
 type WatchListItem struct {
 	Title         string `json:"title"`
 	Id            string `json:"id"`
 	LatestChapter string `json:"latestChapter"`
+	FolderName    string `json:"folderName"`
 }
 
 var args struct {
@@ -77,7 +80,7 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 	return 0, err
 }
 
-func fetchZip(zipLocation string, mangaTitle string, chapterId string) {
+func fetchZip(zipLocation string, folderName string, chapterId string) {
 	zipLoc := zipLocation
 
 	zipResp, httpErr := http.Get(zipLoc)
@@ -93,7 +96,7 @@ func fetchZip(zipLocation string, mangaTitle string, chapterId string) {
 	pathFragments := strings.Split(u.Path, "/")
 	fileName := pathFragments[len(pathFragments)-1]
 	// TODO: Fix this pathing
-	path := []string{"", mangaTitle, chapterId}
+	path := []string{"", folderName, chapterId}
 	outputPath := createDirsFromPath(path)
 	log.Println(outputPath)
 	filePath := outputPath + "/" + fileName
@@ -144,10 +147,12 @@ func buildSeriesList(api api.Api) {
 		}
 		data := output.Data
 
+		r := regexp.MustCompile(`[^a-zA-Z0-9_.-]\s*`)
 		first := data[0]
 		seriesTitle := first.Manga.SeriesTitle
-		log.Printf("Found series at %d; Name: %s\n", id, seriesTitle)
-		series = append(series, WatchListItem{Title: seriesTitle, Id: strconv.Itoa(id)})
+		folderName := strings.TrimRight(strings.ToLower(r.ReplaceAllString(first.Manga.SeriesTitle, "-")), "-")
+		log.Printf("Found series at %d; Name: %s\n; Folder: %s", id, seriesTitle, folderName)
+		series = append(series, WatchListItem{Title: seriesTitle, Id: strconv.Itoa(id), FolderName: folderName})
 		id++
 
 		// Wait n seconds before trying the next id
@@ -155,10 +160,10 @@ func buildSeriesList(api api.Api) {
 	}
 
 	err := encoder.Encode(series)
-	log.Printf("Finished! Found %d titles.\n", len(series))
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("Finished! Found %d titles.\n", len(series))
 }
 
 func getSeriesList() []WatchListItem {
@@ -268,7 +273,7 @@ func updateWatchList(api api.Api) {
 
 			log.Printf("Getting chapter %s (id: %d)\n", chapter.Manga.Chapter, chapter.Manga.MangaCommonId)
 			location := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
-			fetchZip(location.Data, item.Title, chapter.Manga.Chapter)
+			fetchZip(location.Data, item.FolderName, chapter.Manga.Chapter)
 
 			// Update to item with latest chapter data
 			// to be written to disk outside of both iterations
