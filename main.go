@@ -265,39 +265,51 @@ MangaLoop:
 			d2, _ := time.Parse(time.RFC3339, listings.Data[j].Manga.PublicationDate)
 			return d1.Before(d2)
 		})
+
+	ChapterLoop:
 		for i, chapter := range listings.Data {
 			chapterAsFloat, _ := strconv.ParseFloat(chapter.Manga.Chapter, 32)
 			latestChapterAsFloat, _ := strconv.ParseFloat(item.LatestChapter, 32)
 
 			if !chapter.Manga.Published {
 				log.Printf("Chapter isn't published (%s)\n", chapter.Manga.Chapter)
-				continue
+				continue ChapterLoop
 			}
 
 			if chapterAsFloat <= latestChapterAsFloat {
 				log.Printf("Skipping because chapter already downloaded. Latest chapter (%.1f) >= current chapter (%.1f)", latestChapterAsFloat, chapterAsFloat)
-				continue
+				continue ChapterLoop
 			}
 
 			log.Printf("Getting chapter %s (id: %d)\n", chapter.Manga.Chapter, chapter.Manga.MangaCommonId)
 			location, err := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
 
-			if err != nil {
-				if i == len(listings.Data)-1 {
-					item.LatestChapter = chapter.Manga.Chapter
+			if err != nil || location.Data == "no_auth" {
+				// Reset to the last chapter or nothing
+				// if we error out of fetching the location
+				// for the current chapter
+				if i > 0 {
+					prevChapter := listings.Data[i-1]
+					item.LatestChapter = prevChapter.Manga.Chapter
 				}
+			}
+
+			if err != nil {
 				log.Println("Failed to fetch series zip location with error: ", err)
-				log.Println("Likely due to running out of weekly downloads. Try again next week.")
 				break MangaLoop
 			}
 
-			fetchZip(location.Data, item.FolderName, chapter.Manga.Chapter)
+			if location.Data == "no_auth" {
+				log.Println("Run out of daily downloads. Try again tomorrow!")
+				break MangaLoop
+			}
 
-			// Update to item with latest chapter data
-			// to be written to disk outside of both iterations
 			if i == len(listings.Data)-1 {
+				// Update latest chapter with this chapter
 				item.LatestChapter = chapter.Manga.Chapter
 			}
+
+			fetchZip(location.Data, item.FolderName, chapter.Manga.Chapter)
 
 			// Wait 5s before downloading next chapter
 			time.Sleep(sleepTime)
