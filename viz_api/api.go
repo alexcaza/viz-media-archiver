@@ -89,6 +89,7 @@ type Api struct {
 func NewApi() Api {
 	return Api{baseUrl: "https://api.viz.com"}
 }
+
 func (a Api) setNecessaryHeaders(req *http.Request) *http.Request {
 	req.Header.Add("X-Devil-Fruit", "5.5.7 gum-gum fruits")
 	req.Header.Add("Accept", "*/*")
@@ -98,6 +99,7 @@ func (a Api) setNecessaryHeaders(req *http.Request) *http.Request {
 
 	return req
 }
+
 func (a Api) buildFormParams(chapterId string) string {
 	err := godotenv.Load(".env")
 
@@ -119,7 +121,10 @@ func (a Api) buildFormParams(chapterId string) string {
 
 	return v.Encode()
 }
-func (a Api) FetchSeriesChapters(seriesId string) Manga {
+
+// TODO: This should return an err so we can handle it
+// and properly handle closing out the requests sequence
+func (a Api) FetchSeriesChapters(seriesId string) (manga Manga, err error) {
 	var output Manga
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", a.baseUrl+"/manga/store/series/"+seriesId+"/1/1/8", nil)
@@ -127,13 +132,13 @@ func (a Api) FetchSeriesChapters(seriesId string) Manga {
 	a.setNecessaryHeaders(req)
 
 	if err != nil {
-		log.Fatal("Failed to build request. Exiting")
+		return output, err
 	}
 
 	resp, err := client.Do(req)
 
 	if err != nil {
-		log.Fatal("Failed to fetch. Exiting", err)
+		return output, err
 	}
 
 	decoder := json.NewDecoder(resp.Body)
@@ -142,12 +147,13 @@ func (a Api) FetchSeriesChapters(seriesId string) Manga {
 	decodeErr := decoder.Decode(&output)
 
 	if decodeErr != nil {
-		log.Fatal("Failed to decode output. Exiting.", decodeErr)
+		return output, decodeErr
 	}
 
-	return output
+	return output, nil
 }
-func (a Api) FetchZipLocation(chapterId string) MangaZip {
+
+func (a Api) FetchZipLocation(chapterId string) (zip MangaZip, err error) {
 	var mangaZip MangaZip
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", a.baseUrl+"/manga/get_manga_url?"+a.buildFormParams(chapterId), nil)
@@ -155,21 +161,21 @@ func (a Api) FetchZipLocation(chapterId string) MangaZip {
 	a.setNecessaryHeaders(req)
 
 	if err != nil {
-		log.Fatal("Failed to build request. Exiting")
+		return mangaZip, err
 	}
 
 	resp, err := client.Do(req)
 
 	if err != nil {
-		log.Fatal("Failed to fetch. Exiting")
+		return mangaZip, err
 	}
 
 	defer resp.Body.Close()
 
 	decodeErr := json.NewDecoder(resp.Body).Decode(&mangaZip)
 	if decodeErr != nil {
-		log.Fatalln("Failed to decode manga zip with: ", decodeErr)
+		return mangaZip, decodeErr
 	}
 
-	return mangaZip
+	return mangaZip, nil
 }

@@ -136,7 +136,11 @@ func buildSeriesList(api api.Api) {
 	}
 
 	for id < MAX_ID {
-		output := api.FetchSeriesChapters(strconv.Itoa(id))
+		output, err := api.FetchSeriesChapters(strconv.Itoa(id))
+		if err != nil {
+			log.Fatalln("Failed to fetch series chapters with error: ", err)
+		}
+
 		if output.Data == nil {
 			log.Printf("The id %d doesn't exist. Skipping...", id)
 			id++
@@ -245,12 +249,16 @@ func updateWatchList(api api.Api) {
 	// Need to check watch list, look at latest chapter in dir
 	// then find all missing chapters
 	log.Println("Starting downloads...")
+MangaLoop:
 	for i := 0; i < len(watchList); i++ {
 		// Later in the function, item will be mutated
 		// so we need the reference to the object in memory
 		item := &watchList[i]
 		log.Printf("Fetching manga %s\n", item.Title)
-		listings := api.FetchSeriesChapters(item.Id)
+		listings, err := api.FetchSeriesChapters(item.Id)
+		if err != nil {
+			log.Fatalln("Failed to fetch series chapter with error: ", err)
+		}
 		// Sort by oldest first
 		sort.Slice(listings.Data, func(i, j int) bool {
 			d1, _ := time.Parse(time.RFC3339, listings.Data[i].Manga.PublicationDate)
@@ -272,7 +280,17 @@ func updateWatchList(api api.Api) {
 			}
 
 			log.Printf("Getting chapter %s (id: %d)\n", chapter.Manga.Chapter, chapter.Manga.MangaCommonId)
-			location := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
+			location, err := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
+
+			if err != nil {
+				if i == len(listings.Data)-1 {
+					item.LatestChapter = chapter.Manga.Chapter
+				}
+				log.Println("Failed to fetch series zip location with error: ", err)
+				log.Println("Likely due to running out of weekly downloads. Try again next week.")
+				break MangaLoop
+			}
+
 			fetchZip(location.Data, item.FolderName, chapter.Manga.Chapter)
 
 			// Update to item with latest chapter data
