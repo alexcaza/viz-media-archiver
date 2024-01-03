@@ -59,22 +59,21 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 
 	defer archive.Close()
 
-	jpgIndex := 0
 	for _, f := range archive.File {
+		fileName := strings.Split(f.Name, ".")[0]
 		extension := strings.Split(f.Name, ".")[1]
-		var fileName string
+		var fileNameWithExtension string
 		switch extension {
 		case "jpg":
-			fileName = strconv.Itoa(jpgIndex) + "." + extension
-			jpgIndex++
+			fileNameWithExtension = fileName + "." + extension
 		case "json":
-			fileName = "metadata" + "." + extension
+			fileNameWithExtension = "metadata" + "." + extension
 		default:
-			fileName = f.Name
+			fileNameWithExtension = f.Name
 		}
 
 		archiveFile, _ := f.Open()
-		diskFile, _ := os.Create(folderPath + "/" + fileName)
+		diskFile, _ := os.Create(folderPath + "/" + fileNameWithExtension)
 		io.Copy(diskFile, archiveFile)
 	}
 	return 0, err
