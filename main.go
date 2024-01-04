@@ -270,8 +270,8 @@ MangaLoop:
 			chapterAsFloat, _ := strconv.ParseFloat(chapter.Manga.Chapter, 32)
 			latestChapterAsFloat, _ := strconv.ParseFloat(item.LatestChapter, 32)
 
-			if !chapter.Manga.Published {
-				log.Printf("Chapter isn't published (%s)\n", chapter.Manga.Chapter)
+			if chapter.Manga.WebPrice != "" {
+				log.Printf("Item isn't free (%s)\n", chapter.Manga.Title)
 				continue ChapterLoop
 			}
 
