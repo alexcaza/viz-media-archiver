@@ -40,7 +40,7 @@ func createDirsFromPath(path []string) string {
 	return dirPath
 }
 
-func writeZip(path string, data io.ReadCloser) (int64, error) {
+func writeZip(path string, data io.ReadCloser) error {
 	out, err := os.Create(path)
 
 	if err != nil {
@@ -62,6 +62,14 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 	for _, f := range archive.File {
 		fileName := strings.Split(f.Name, ".")[0]
 		extension := strings.Split(f.Name, ".")[1]
+
+		if fileName == "0.jpg" {
+			// 0.jpg doesn't have any useful information,
+			// it's just used in their apps to tell people
+			// to swipe the right way. (Left intead of Right)
+			continue
+		}
+
 		var fileNameWithExtension string
 		switch extension {
 		case "jpg":
@@ -76,7 +84,7 @@ func writeZip(path string, data io.ReadCloser) (int64, error) {
 		diskFile, _ := os.Create(folderPath + "/" + fileNameWithExtension)
 		io.Copy(diskFile, archiveFile)
 	}
-	return 0, err
+	return err
 }
 
 func fetchZip(zipLocation string, folderName string, chapterId string) {
@@ -100,7 +108,7 @@ func fetchZip(zipLocation string, folderName string, chapterId string) {
 	log.Println(outputPath)
 	filePath := outputPath + "/" + fileName
 
-	_, writeErr := writeZip(filePath, zipResp.Body)
+	writeErr := writeZip(filePath, zipResp.Body)
 
 	if writeErr != nil {
 		log.Fatalf("Failed to write file (%s) to disk.", filePath)
