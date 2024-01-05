@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -124,10 +125,10 @@ func (a Api) buildFormParams(chapterId string) string {
 
 // TODO: This should return an err so we can handle it
 // and properly handle closing out the requests sequence
-func (a Api) FetchSeriesChapters(seriesId string) (manga Manga, err error) {
+func (a Api) FetchSeriesChapters(seriesId int) (manga Manga, err error) {
 	var output Manga
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", a.baseUrl+"/manga/store/series/"+seriesId+"/1/1/8", nil)
+	req, err := http.NewRequest("GET", a.baseUrl+"/manga/store/series/"+strconv.Itoa(seriesId)+"/1/1/8", nil)
 
 	a.setNecessaryHeaders(req)
 

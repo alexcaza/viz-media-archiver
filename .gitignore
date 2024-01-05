@@ -52,3 +52,5 @@ _testmain.go
 
 .env
 to-watch.json
+*.db
+viz-media

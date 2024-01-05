@@ -2,13 +2,13 @@ package main
 
 import (
 	"archive/zip"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -16,10 +16,27 @@ import (
 	"time"
 	api "viz-media/viz_api"
 
+	"github.com/gosimple/slug"
+	_ "github.com/mattn/go-sqlite3"
+
 	goarg "github.com/alexflint/go-arg"
 )
 
-type WatchListItem struct {
+type WatchedManga struct {
+	Id       int
+	SeriesId int
+	Title    string
+	Slug     string
+}
+
+type DownloadedChapters struct {
+	Id           int
+	WatchingId   int
+	SeriesId     int
+	ChapterLabel string
+}
+
+type SeriesListItem struct {
 	Title         string `json:"title"`
 	Id            string `json:"id"`
 	LatestChapter string `json:"latestChapter"`
@@ -87,7 +104,7 @@ func writeZip(path string, data io.ReadCloser) error {
 	return err
 }
 
-func fetchZip(zipLocation string, folderName string, chapterId string) {
+func fetchZip(zipLocation string, folderName string, chapterId string) bool {
 	zipLoc := zipLocation
 
 	zipResp, httpErr := http.Get(zipLoc)
@@ -105,7 +122,6 @@ func fetchZip(zipLocation string, folderName string, chapterId string) {
 	// TODO: Fix this pathing
 	path := []string{"", folderName, chapterId}
 	outputPath := createDirsFromPath(path)
-	log.Println(outputPath)
 	filePath := outputPath + "/" + fileName
 
 	writeErr := writeZip(filePath, zipResp.Body)
@@ -113,17 +129,21 @@ func fetchZip(zipLocation string, folderName string, chapterId string) {
 	if writeErr != nil {
 		log.Fatalf("Failed to write file (%s) to disk.", filePath)
 	}
+
+	log.Println("Saved chapter to: ", filePath)
+
+	return true
 }
 
 func buildSeriesList(api api.Api) {
 	log.Println("Starting to fetch.")
-	var seriesList []WatchListItem
+	var seriesList []SeriesListItem
 	const MAX_ID = 1000
 	// TODO: Get the latest id in the json file so that
 	// we don't always start from 1
 	id := 1
 	sleepTime := 1 * time.Second
-	var series []WatchListItem
+	var series []SeriesListItem
 
 	file, _ := os.OpenFile("series-list.json", os.O_WRONLY, os.ModeAppend)
 	defer file.Close()
@@ -143,7 +163,7 @@ func buildSeriesList(api api.Api) {
 	}
 
 	for id < MAX_ID {
-		output, err := api.FetchSeriesChapters(strconv.Itoa(id))
+		output, err := api.FetchSeriesChapters(id)
 		if err != nil {
 			log.Fatalln("Failed to fetch series chapters with error: ", err)
 		}
@@ -158,12 +178,11 @@ func buildSeriesList(api api.Api) {
 		}
 		data := output.Data
 
-		r := regexp.MustCompile(`[^a-zA-Z0-9_.-]\s*`)
 		first := data[0]
 		seriesTitle := first.Manga.SeriesTitle
-		folderName := strings.TrimRight(strings.ToLower(r.ReplaceAllString(first.Manga.SeriesTitle, "-")), "-")
+		folderName := slug.Make(first.Manga.SeriesTitle)
 		log.Printf("Found series at %d; Name: %s\n; Folder: %s", id, seriesTitle, folderName)
-		series = append(series, WatchListItem{Title: seriesTitle, Id: strconv.Itoa(id), FolderName: folderName})
+		series = append(series, SeriesListItem{Title: seriesTitle, Id: strconv.Itoa(id), FolderName: folderName})
 		id++
 
 		// Wait n seconds before trying the next id
@@ -177,8 +196,8 @@ func buildSeriesList(api api.Api) {
 	log.Printf("Finished! Found %d titles.\n", len(series))
 }
 
-func getSeriesList() []WatchListItem {
-	var seriesList []WatchListItem
+func getSeriesList() []SeriesListItem {
+	var seriesList []SeriesListItem
 	file, fileErr := os.ReadFile("series-list.json")
 	if fileErr != nil {
 		log.Fatal(fileErr)
@@ -191,116 +210,99 @@ func getSeriesList() []WatchListItem {
 	return seriesList
 }
 
-// TODO: Make this more efficient and do a proper field merge.
-func upsertWatchListJSON(items []WatchListItem) {
-	var watchingList []WatchListItem
-	// Get contents
-	contents, _ := os.Open("to-watch.json")
-	bytes, _ := io.ReadAll(contents)
-
-	// Open file for writing and truncate
-	file, _ := os.Create("to-watch.json")
-	defer file.Close()
-	encoder := json.NewEncoder(file)
-
-	if len(bytes) > 0 {
-		jsonErr := json.Unmarshal(bytes, &watchingList)
-		if jsonErr != nil {
-			log.Fatal("JSON err:", jsonErr)
-		}
-	}
+func upsertWatching(db *sql.DB, items []SeriesListItem, toWatch []int) {
 	for _, item := range items {
-		if len(watchingList) < 1 {
-			watchingList = append(watchingList, item)
+		if slices.ContainsFunc(toWatch, func(id int) bool {
+			return strconv.Itoa(id) != item.Id
+		}) {
 			continue
 		}
 
-		for range watchingList {
-			// If slice doesn't contain this id already
-			if !slices.ContainsFunc(watchingList, func(a WatchListItem) bool {
-				return a.Id == item.Id
-			}) {
-				watchingList = append(watchingList, item)
+		res, err := db.Exec(
+			"insert into watching (id, series_id, title, slug) values (?, ?, ?, ?) on conflict do update set series_id=excluded.series_id",
+			nil, item.Id, item.Title, slug.Make(item.Title),
+		)
+		if err != nil {
+			log.Fatalln("Failed to write to watching with: ", err)
+		} else {
+			id, _ := res.LastInsertId()
+			if id > 0 {
+				log.Println("Created item in watching: ", id)
 			} else {
-				index := slices.IndexFunc(watchingList, func(a WatchListItem) bool {
-					return a.Id == item.Id
-				})
-
-				// If the latest chapters don't match, we're probably upserting it.
-				if watchingList[index].LatestChapter != item.LatestChapter && item.LatestChapter != "" {
-					watchingList[index] = item
-				}
+				log.Println("Item already created in watching... skipping.")
 			}
 		}
 	}
-
-	err := encoder.Encode(watchingList)
-	if err != nil {
-		log.Fatal("Encoding error:", err)
-	}
 }
 
-// TODO: Make this more efficient;
-// Allow for starting from start or end?
-func updateWatchList(api api.Api) {
-	var watchList []WatchListItem
-	contents, _ := os.Open("to-watch.json")
-	bytes, _ := io.ReadAll(contents)
+func updateWatchList(db *sql.DB, a api.Api) {
 	sleepTime := 5 * time.Second
-	json.Unmarshal(bytes, &watchList)
+	watchList, err := db.Query("select * from watching")
+	var watchedMangas []WatchedManga
+	for watchList.Next() {
+		var watchedManga WatchedManga
+		err := watchList.Scan(&watchedManga.Id, &watchedManga.SeriesId, &watchedManga.Title, &watchedManga.Slug)
+		if err != nil {
+			log.Fatalln("Failed to create watchedManga")
+		}
+		watchedMangas = append(watchedMangas, watchedManga)
+	}
+	watchList.Close()
 
-	if len(watchList) < 1 {
-		log.Fatalln("Your watchlist is empty! Please add ids from `series-list.json` by using the --to-watch argument")
+	if err != nil {
+		log.Fatalln("Failed to get watchlist items", err)
 	}
 
-	// Need to check watch list, look at latest chapter in dir
-	// then find all missing chapters
-	log.Println("Starting downloads...")
 MangaLoop:
-	for i := 0; i < len(watchList); i++ {
-		// Later in the function, item will be mutated
-		// so we need the reference to the object in memory
-		item := &watchList[i]
-		log.Printf("Fetching manga %s\n", item.Title)
-		listings, err := api.FetchSeriesChapters(item.Id)
+	for _, watchedManga := range watchedMangas {
+		// Need to check watch list, look at latest chapter in dir
+		// then find all missing chapters
+		log.Println("Starting downloads...")
+		log.Printf("Fetching manga %s\n", watchedManga.Title)
+		listings, err := a.FetchSeriesChapters(watchedManga.SeriesId)
 		if err != nil {
 			log.Fatalln("Failed to fetch series chapter with error: ", err)
 		}
 		// Sort by oldest first
 		sort.Slice(listings.Data, func(i, j int) bool {
-			d1, _ := time.Parse(time.RFC3339, listings.Data[i].Manga.PublicationDate)
-			d2, _ := time.Parse(time.RFC3339, listings.Data[j].Manga.PublicationDate)
-			return d1.Before(d2)
+			d1, _ := strconv.ParseFloat(listings.Data[i].Manga.PublicationDate, 32)
+			d2, _ := strconv.ParseFloat(listings.Data[j].Manga.PublicationDate, 32)
+			return d1 < d2
 		})
 
-	ChapterLoop:
-		for i, chapter := range listings.Data {
-			chapterAsFloat, _ := strconv.ParseFloat(chapter.Manga.Chapter, 32)
-			latestChapterAsFloat, _ := strconv.ParseFloat(item.LatestChapter, 32)
+		var chapters []DownloadedChapters
+		downloadedChapters, err := db.Query("select * from downloaded where series_id = ? order by cast(chapter_label as real) asc", watchedManga.SeriesId)
+		if err != nil {
+			log.Fatalf("Failed to get downloaded items for series_id %d with error: ", watchedManga.SeriesId, err)
+		}
 
-			if chapter.Manga.WebPrice != "" {
-				log.Printf("Item isn't free (%s)\n", chapter.Manga.Title)
-				continue ChapterLoop
+		for downloadedChapters.Next() {
+			var chapter DownloadedChapters
+			downloadedChapters.Scan(&chapter.Id, &chapter.SeriesId, &chapter.WatchingId, &chapter.ChapterLabel)
+			chapters = append(chapters, chapter)
+		}
+		downloadedChapters.Close()
+
+		var toDownload []api.MangaData
+		for _, listing := range listings.Data {
+			// Skip chapters we've already downloaded
+			if slices.ContainsFunc(chapters, func(dc DownloadedChapters) bool {
+				return dc.ChapterLabel == listing.Manga.Chapter
+			}) {
+				continue
 			}
 
-			if chapterAsFloat <= latestChapterAsFloat {
-				log.Printf("Skipping because chapter already downloaded. Latest chapter (%.1f) >= current chapter (%.1f)", latestChapterAsFloat, chapterAsFloat)
-				continue ChapterLoop
+			if listing.Manga.WebPrice != "" {
+				log.Println("Chapter/Volume isn't free. Skipping...", listing.Manga.Title, listing.Manga.Chapter)
+				continue
 			}
 
-			log.Printf("Getting chapter %s (id: %d)\n", chapter.Manga.Chapter, chapter.Manga.MangaCommonId)
-			location, err := api.FetchZipLocation(strconv.Itoa(chapter.Manga.MangaCommonId))
+			toDownload = append(toDownload, listing)
+		}
 
-			if err != nil || location.Data == "no_auth" {
-				// Reset to the last chapter or nothing
-				// if we error out of fetching the location
-				// for the current chapter
-				if i > 0 {
-					prevChapter := listings.Data[i-1]
-					item.LatestChapter = prevChapter.Manga.Chapter
-				}
-			}
-
+		for _, chapterToDownload := range toDownload {
+			log.Printf("Getting chapter %s (id: %d)\n", chapterToDownload.Manga.Chapter, chapterToDownload.Manga.MangaCommonId)
+			location, err := a.FetchZipLocation(strconv.Itoa(chapterToDownload.Manga.MangaCommonId))
 			if err != nil {
 				log.Println("Failed to fetch series zip location with error: ", err)
 				break MangaLoop
@@ -311,43 +313,53 @@ MangaLoop:
 				break MangaLoop
 			}
 
-			if i == len(listings.Data)-1 {
-				// Update latest chapter with this chapter
-				item.LatestChapter = chapter.Manga.Chapter
-			}
+			didWrite := fetchZip(location.Data, watchedManga.Slug, chapterToDownload.Manga.Chapter)
 
-			fetchZip(location.Data, item.FolderName, chapter.Manga.Chapter)
+			if didWrite {
+				_, err := db.Exec(
+					"insert into downloaded (id, watching_id, series_id, chapter_label) values (?, ?, ?, ?)",
+					nil, watchedManga.Id, watchedManga.SeriesId, chapterToDownload.Manga.Chapter,
+				)
+
+				if err != nil {
+					log.Fatalln("Failed to save downloaded chapter to db", err)
+				}
+
+				log.Printf("Updated DB with chapter %s. Moving on.\n", chapterToDownload.Manga.Chapter)
+			}
 
 			// Wait 5s before downloading next chapter
 			time.Sleep(sleepTime)
+
 		}
 
 	}
-
-	upsertWatchListJSON(watchList)
 }
 
 func main() {
 	goarg.MustParse(&args)
 	api := api.NewApi()
+	db, err := sql.Open("sqlite3", "./viz.db")
+	defer db.Close()
+	_, err = db.Exec("create table if not exists watching (id integer PRIMARY KEY, series_id integer, title text NOT NULL, slug text NOT NULL, UNIQUE(series_id))")
+	if err != nil {
+		log.Println("Failed to create `watching` table with error:", err)
+	}
+
+	_, err = db.Exec("create table if not exists downloaded (id integer PRIMARY KEY, watching_id integer NOT NULL, series_id integer NOT NULL, chapter_label text NOT NULL, FOREIGN KEY(watching_id) REFERENCES watching(id), UNIQUE(watching_id, series_id, chapter_label))")
+	if err != nil {
+		log.Println("Failed to create `downloaded` table with error:", err)
+	}
 
 	if args.GenListing {
 		buildSeriesList(api)
 	}
 
 	if len(args.AddToWatch) > 0 {
-		seriesList := getSeriesList()
-		var toWatch []WatchListItem
-		for _, id := range args.AddToWatch {
-			for _, seriesListItem := range seriesList {
-				if seriesListItem.Id == strconv.Itoa(id) {
-					toWatch = append(toWatch, seriesListItem)
-				}
-			}
-		}
-		upsertWatchListJSON(toWatch)
+		upsertWatching(db, getSeriesList(), args.AddToWatch)
 	}
 
 	// Check for updates and download files
-	updateWatchList(api)
+	log.Println("Updating watch list")
+	updateWatchList(db, api)
 }
