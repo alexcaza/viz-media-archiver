@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -44,8 +45,10 @@ type SeriesListItem struct {
 }
 
 var args struct {
-	GenListing bool  `arg:"--generate-listing" help:"Generates list of series."`
-	AddToWatch []int `arg:"--to-watch" help:"Adds ids to list of series to watch. Must be in series-list.json"`
+	GenListing  bool  `arg:"--generate-listing" help:"Generates list of series."`
+	AddToWatch  []int `arg:"--to-watch, -w" help:"Adds ids to list of series to watch. Must be in series-list.json."`
+	ForceUpdate bool  `arg:"--force, -f" help: "Forces watching list to be updated completely."`
+	UpdateList  []int `arg:"--update-list, -u" help: "Specific series ids to be updated. Can be paired with -f to force and update"`
 }
 
 func createDirsFromPath(path []string) string {
@@ -235,9 +238,30 @@ func upsertWatching(db *sql.DB, items []SeriesListItem, toWatch []int) {
 	}
 }
 
-func updateWatchList(db *sql.DB, a api.Api) {
+func updateWatchList(db *sql.DB, a api.Api, updateList []int, force bool) {
 	sleepTime := 5 * time.Second
-	watchList, err := db.Query("select * from watching")
+	var watchList *sql.Rows
+	if len(updateList) < 1 {
+		list, err := db.Query("select * from watching")
+		watchList = list
+		if err != nil {
+			log.Fatalln("Failed to get watchlist items", err)
+		}
+	} else {
+		var params []string
+		for _, id := range updateList {
+			params = append(params, strconv.Itoa(id))
+		}
+		// WARNING: Not save. Since inputs are "known" and the only risk is your own
+		// failure to pass valid arguments, I'm not too worried about injection issues.
+		// This isn't an exposed service. If you run it as one, fix this before doing so!
+		query := fmt.Sprintf("select * from watching where series_id in (%s)", strings.Join(params, ","))
+		list, err := db.Query(query)
+		watchList = list
+		if err != nil {
+			log.Fatalln("Failed to get watchlist items", err)
+		}
+	}
 	var watchedMangas []WatchedManga
 	for watchList.Next() {
 		var watchedManga WatchedManga
@@ -248,10 +272,6 @@ func updateWatchList(db *sql.DB, a api.Api) {
 		watchedMangas = append(watchedMangas, watchedManga)
 	}
 	watchList.Close()
-
-	if err != nil {
-		log.Fatalln("Failed to get watchlist items", err)
-	}
 
 MangaLoop:
 	for _, watchedManga := range watchedMangas {
@@ -285,6 +305,12 @@ MangaLoop:
 
 		var toDownload []api.MangaData
 		for _, listing := range listings.Data {
+
+			if force {
+				toDownload = append(toDownload, listing)
+				continue
+			}
+
 			// Skip chapters we've already downloaded
 			if slices.ContainsFunc(chapters, func(dc DownloadedChapters) bool {
 				return dc.ChapterLabel == listing.Manga.Chapter
@@ -361,5 +387,5 @@ func main() {
 
 	// Check for updates and download files
 	log.Println("Updating watch list")
-	updateWatchList(db, api)
+	updateWatchList(db, api, args.UpdateList, args.ForceUpdate)
 }
