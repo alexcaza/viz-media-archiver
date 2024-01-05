@@ -252,7 +252,8 @@ func updateWatchList(db *sql.DB, a api.Api, updateList []int, force bool) {
 		for _, id := range updateList {
 			params = append(params, strconv.Itoa(id))
 		}
-		// WARNING: Not save. Since inputs are "known" and the only risk is your own
+		// WARNING: Not safe from injections!
+		// Since inputs are "known" and the only risk is your own
 		// failure to pass valid arguments, I'm not too worried about injection issues.
 		// This isn't an exposed service. If you run it as one, fix this before doing so!
 		query := fmt.Sprintf("select * from watching where series_id in (%s)", strings.Join(params, ","))
