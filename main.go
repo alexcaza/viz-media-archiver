@@ -51,6 +51,20 @@ var args struct {
 	UpdateList  []int `arg:"--update-list, -u" help: "Specific series ids to be updated. Can be paired with -f to force and update"`
 }
 
+func difference(a, b []string) []string {
+	mb := make(map[string]struct{}, len(b))
+	for _, x := range b {
+		mb[x] = struct{}{}
+	}
+	var diff []string
+	for _, x := range a {
+		if _, found := mb[x]; !found {
+			diff = append(diff, x)
+		}
+	}
+	return diff
+}
+
 func createDirsFromPath(path []string) string {
 	dirPath := "./data" + strings.Join(path, "/")
 	err := os.MkdirAll(dirPath, os.ModePerm)
@@ -214,10 +228,18 @@ func getSeriesList() []SeriesListItem {
 }
 
 func upsertWatching(db *sql.DB, items []SeriesListItem, toWatch []int) {
+	var addedIds []string
+	var toWatchStr []string
+
+	for _, id := range toWatch {
+		toWatchStr = append(toWatchStr, strconv.Itoa(id))
+	}
+
 	for _, item := range items {
-		if slices.ContainsFunc(toWatch, func(id int) bool {
-			return strconv.Itoa(id) != item.Id
-		}) {
+		isValidId := slices.ContainsFunc(toWatchStr, func(id string) bool {
+			return id == item.Id
+		})
+		if !isValidId {
 			continue
 		}
 
@@ -230,12 +252,16 @@ func upsertWatching(db *sql.DB, items []SeriesListItem, toWatch []int) {
 		} else {
 			id, _ := res.LastInsertId()
 			if id > 0 {
-				log.Println("Created item in watching: ", id)
+				log.Printf("Adding item to watching: %s (id: %s)\n", item.Title, item.Id)
+				addedIds = append(addedIds, item.Id)
 			} else {
-				log.Println("Item already created in watching... skipping.")
+				log.Printf("Item already created in watching... skipping. (id: %s)\n", item.Id)
+				addedIds = append(addedIds, item.Id)
 			}
 		}
 	}
+
+	log.Println("Some ids were invalid: ", difference(toWatchStr, addedIds))
 }
 
 func updateWatchList(db *sql.DB, a api.Api, updateList []int, force bool) {
