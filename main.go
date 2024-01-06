@@ -383,6 +383,7 @@ func main() {
 	}
 
 	if len(args.AddToWatch) > 0 {
+		log.Println("Adding ids to watching:", args.AddToWatch)
 		upsertWatching(db, getSeriesList(), args.AddToWatch)
 	}
 
