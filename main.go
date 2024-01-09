@@ -320,7 +320,7 @@ MangaLoop:
 		var chapters []DownloadedChapters
 		downloadedChapters, err := db.Query("select * from downloaded where series_id = ? order by cast(chapter_label as real) asc", watchedManga.SeriesId)
 		if err != nil {
-			log.Fatalf("Failed to get downloaded items for series_id %d with error: ", watchedManga.SeriesId, err)
+			log.Fatalf("Failed to get downloaded items for series_id %d with error: %s", watchedManga.SeriesId, err)
 		}
 
 		for downloadedChapters.Next() {
@@ -355,6 +355,12 @@ MangaLoop:
 
 		for _, chapterToDownload := range toDownload {
 			log.Printf("Getting chapter %s (id: %d)\n", chapterToDownload.Manga.Chapter, chapterToDownload.Manga.MangaCommonId)
+
+			if chapterToDownload.Manga.EpochPubDate > int(time.Now().Unix()) {
+				log.Println("Chapter not yet published... Skipping!")
+				continue
+			}
+
 			location, err := a.FetchZipLocation(strconv.Itoa(chapterToDownload.Manga.MangaCommonId))
 			if err != nil {
 				log.Println("Failed to fetch series zip location with error: ", err)
