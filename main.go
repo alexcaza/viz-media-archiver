@@ -94,6 +94,12 @@ func writeZip(path string, data io.ReadCloser) error {
 	defer archive.Close()
 
 	for _, f := range archive.File {
+
+		if f.FileInfo().IsDir() {
+			log.Println("File is a directory... skipping.")
+			continue
+		}
+
 		fileName := strings.Split(f.Name, ".")[0]
 		extension := strings.Split(f.Name, ".")[1]
 
