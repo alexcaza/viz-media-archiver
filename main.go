@@ -22,6 +22,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	goarg "github.com/alexflint/go-arg"
+	"github.com/joho/godotenv"
 )
 
 type WatchedManga struct {
@@ -160,8 +161,14 @@ func fetchZip(zipLocation string, folderName string, chapterId string) bool {
 
 func buildSeriesList(api api.Api) {
 	log.Println("Starting to fetch.")
+
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Println("Failed to open .env with error: ", err)
+	}
+
 	var seriesList []SeriesListItem
-	const MAX_ID = 1000
+	maxId, _ := strconv.Atoi(os.Getenv("MAX_ID"))
 	id := 1
 	sleepTime := 1 * time.Second
 	var series []SeriesListItem
@@ -185,7 +192,7 @@ func buildSeriesList(api api.Api) {
 		id = lastSeriesId
 	}
 
-	for id < MAX_ID {
+	for id < maxId {
 		output, err := api.FetchSeriesChapters(id)
 		if err != nil {
 			log.Fatalln("Failed to fetch series chapters with error: ", err)
