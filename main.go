@@ -219,8 +219,8 @@ func buildSeriesList(api api.Api) {
 		time.Sleep(sleepTime)
 	}
 
-	err := encoder.Encode(series)
-	if err != nil {
+	encodeErr := encoder.Encode(series)
+	if encodeErr != nil {
 		log.Fatal(err)
 	}
 	log.Printf("Finished! Found %d titles.\n", len(series))
