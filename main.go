@@ -3,7 +3,6 @@ package main
 import (
 	"archive/zip"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -235,21 +234,7 @@ func buildSeriesList(db *sql.DB, api api.Api) {
 	log.Printf("Finished! Found %d titles.\n", len(series))
 }
 
-func getSeriesList() []SeriesListItem {
-	var seriesList []SeriesListItem
-	file, fileErr := os.ReadFile("series-list.json")
-	if fileErr != nil {
-		log.Fatal(fileErr)
-	}
-
-	err := json.Unmarshal(file, &seriesList)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return seriesList
-}
-
-func upsertWatching(db *sql.DB, items []SeriesListItem, toWatch []int) {
+func upsertWatching(db *sql.DB, toWatch []int) {
 	var addedIds []string
 	var toWatchStr []string
 
@@ -257,17 +242,18 @@ func upsertWatching(db *sql.DB, items []SeriesListItem, toWatch []int) {
 		toWatchStr = append(toWatchStr, strconv.Itoa(id))
 	}
 
-	for _, item := range items {
-		isValidId := slices.ContainsFunc(toWatchStr, func(id string) bool {
-			return id == item.Id
-		})
-		if !isValidId {
-			continue
-		}
+	items, err := db.Query("select * from series_list where id in (?"+strings.Repeat(", ?", len(toWatch)-1)+")", toWatch)
+	if err != nil {
+		log.Fatalln("Failed to pull from series_list with error: ", err)
+	}
+
+	for items.Next() {
+		var item SeriesListItem
+		items.Scan(&item.Id, &item.Title, &item.FolderName)
 
 		res, err := db.Exec(
 			"insert into watching (id, series_id, title, slug) values (?, ?, ?, ?) on conflict do update set series_id=excluded.series_id",
-			nil, item.Id, item.Title, slug.Make(item.Title),
+			nil, item.Id, item.Title, item.FolderName,
 		)
 		if err != nil {
 			log.Fatalln("Failed to write to watching with: ", err)
@@ -446,7 +432,7 @@ func main() {
 
 	if len(args.AddToWatch) > 0 {
 		log.Println("Adding ids to watching:", args.AddToWatch)
-		upsertWatching(db, getSeriesList(), args.AddToWatch)
+		upsertWatching(db, args.AddToWatch)
 	}
 
 	// Check for updates and download files
