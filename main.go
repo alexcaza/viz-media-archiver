@@ -416,6 +416,11 @@ func main() {
 	}
 
 	defer db.Close()
+	_, err = db.Exec("create table if not exists series_list (id integer PRIMARY KEY, title text NOT NULL, slug text NOT NULL)")
+	if err != nil {
+		log.Println("Failed to create `series_list` table with error:", err)
+	}
+
 	_, err = db.Exec("create table if not exists watching (id integer PRIMARY KEY, series_id integer, title text NOT NULL, slug text NOT NULL, UNIQUE(series_id))")
 	if err != nil {
 		log.Println("Failed to create `watching` table with error:", err)
