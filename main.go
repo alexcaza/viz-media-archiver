@@ -182,8 +182,8 @@ func buildSeriesList(api api.Api) {
 
 	if len(seriesList) > 0 {
 		sort.Slice(seriesList, func(i int, j int) bool {
-			id1, _ := strconv.ParseInt(seriesList[i].Id, 10, 32)
-			id2, _ := strconv.ParseInt(seriesList[j].Id, 10, 32)
+			id1, _ := strconv.Atoi(seriesList[i].Id)
+			id2, _ := strconv.Atoi(seriesList[j].Id)
 			return id1 > id2
 		})
 		lastSeriesId, _ := strconv.Atoi(seriesList[0].Id)
