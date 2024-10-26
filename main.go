@@ -49,8 +49,8 @@ type SeriesListItem struct {
 var args struct {
 	GenListing  bool  `arg:"--generate-listing" help:"Generates list of series."`
 	AddToWatch  []int `arg:"--to-watch, -w" help:"Adds ids to list of series to watch. Must be in series-list.json."`
-	ForceUpdate bool  `arg:"--force, -f" help: "Forces watching list to be updated completely."`
-	UpdateList  []int `arg:"--update-list, -u" help: "Specific series ids to be updated. Can be paired with -f to force and update"`
+	ForceUpdate bool  `arg:"--force, -f" help:"Forces watching list to be updated completely."`
+	UpdateList  []int `arg:"--update-list, -u" help:"Specific series ids to be updated. Can be paired with -f to force and update"`
 }
 
 func difference(a, b []string) []string {
