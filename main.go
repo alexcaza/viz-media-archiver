@@ -242,7 +242,12 @@ func upsertWatching(db *sql.DB, toWatch []int) {
 		toWatchStr = append(toWatchStr, strconv.Itoa(id))
 	}
 
-	items, err := db.Query("select * from series_list where id in (?"+strings.Repeat(", ?", len(toWatch)-1)+")", toWatch)
+	// WARNING: Not safe from injections!
+	// Since inputs are "known" and the only risk is your own
+	// failure to pass valid arguments, I'm not too worried about injection issues.
+	// This isn't an exposed service. If you run it as one, fix this before doing so!
+	query := fmt.Sprintf("select * from series_list where id in (%s)", strings.Join(toWatchStr, ","))
+	items, err := db.Query(query)
 	if err != nil {
 		log.Fatalln("Failed to pull from series_list with error: ", err)
 	}
