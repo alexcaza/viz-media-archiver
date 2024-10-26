@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	api "viz-media/viz_api"
 
 	"github.com/gosimple/slug"
@@ -76,7 +77,6 @@ func createDirsFromPath(path []string) string {
 
 func writeZip(path string, data io.ReadCloser) error {
 	out, err := os.Create(path)
-
 	if err != nil {
 		log.Fatalf("Failed to create zip file: %s", path)
 	}
@@ -385,7 +385,6 @@ MangaLoop:
 					"insert into downloaded (id, watching_id, series_id, chapter_label) values (?, ?, ?, ?)",
 					nil, watchedManga.Id, watchedManga.SeriesId, chapterToDownload.Manga.Chapter,
 				)
-
 				if err != nil {
 					log.Fatalln("Failed to save downloaded chapter to db", err)
 				}
@@ -405,6 +404,10 @@ func main() {
 	goarg.MustParse(&args)
 	api := api.NewApi()
 	db, err := sql.Open("sqlite3", "./viz.db")
+	if err != nil {
+		log.Println("Filed to open sqlite database with error: ", err)
+	}
+
 	defer db.Close()
 	_, err = db.Exec("create table if not exists watching (id integer PRIMARY KEY, series_id integer, title text NOT NULL, slug text NOT NULL, UNIQUE(series_id))")
 	if err != nil {
