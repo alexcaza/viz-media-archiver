@@ -162,8 +162,6 @@ func buildSeriesList(api api.Api) {
 	log.Println("Starting to fetch.")
 	var seriesList []SeriesListItem
 	const MAX_ID = 1000
-	// TODO: Get the latest id in the json file so that
-	// we don't always start from 1
 	id := 1
 	sleepTime := 1 * time.Second
 	var series []SeriesListItem
@@ -182,6 +180,8 @@ func buildSeriesList(api api.Api) {
 			return id1 > id2
 		})
 		lastSeriesId, _ := strconv.Atoi(seriesList[0].Id)
+		// Set the id to the last series so we don't start over
+		// every time
 		id = lastSeriesId
 	}
 
