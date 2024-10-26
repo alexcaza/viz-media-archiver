@@ -159,7 +159,7 @@ func fetchZip(zipLocation string, folderName string, chapterId string) bool {
 	return true
 }
 
-func buildSeriesList(api api.Api) {
+func buildSeriesList(db *sql.DB, api api.Api) {
 	log.Println("Starting to fetch.")
 
 	err := godotenv.Load(".env")
@@ -167,26 +167,30 @@ func buildSeriesList(api api.Api) {
 		log.Println("Failed to open .env with error: ", err)
 	}
 
-	var seriesList []SeriesListItem
 	maxId, _ := strconv.Atoi(os.Getenv("MAX_ID"))
 	id := 1
 	sleepTime := 1 * time.Second
 	var series []SeriesListItem
 
-	file, _ := os.OpenFile("series-list.json", os.O_WRONLY, os.ModeAppend)
-	defer file.Close()
-	encoder := json.NewEncoder(file)
+	list, err := db.Query("select * from series_list order by id asc")
+	if err != nil {
+		log.Fatalln("Failed to query series_list with error: ", err)
+	}
 
-	seriesListFile, _ := os.ReadFile("series-list.json")
-	json.Unmarshal(seriesListFile, &seriesList)
+	for list.Next() {
+		var seriesItem SeriesListItem
+		err := list.Scan(&seriesItem.Id, &seriesItem.Title, &seriesItem.FolderName)
+		if err != nil {
+			log.Fatalln("Failed to create watchedManga")
+		}
+		series = append(series, seriesItem)
+	}
 
-	if len(seriesList) > 0 {
-		sort.Slice(seriesList, func(i int, j int) bool {
-			id1, _ := strconv.Atoi(seriesList[i].Id)
-			id2, _ := strconv.Atoi(seriesList[j].Id)
-			return id1 > id2
-		})
-		lastSeriesId, _ := strconv.Atoi(seriesList[0].Id)
+	if len(series) > 0 {
+		lastSeriesId, err := strconv.Atoi(series[0].Id)
+		if err != nil {
+			log.Fatalln("Failed to convert series id to int: ", series[0])
+		}
 		// Set the id to the last series so we don't start over
 		// every time
 		id = lastSeriesId
@@ -211,18 +215,23 @@ func buildSeriesList(api api.Api) {
 		first := data[0]
 		seriesTitle := first.Manga.SeriesTitle
 		folderName := slug.Make(first.Manga.SeriesTitle)
-		log.Printf("Found series at %d; Name: %s\n; Folder: %s", id, seriesTitle, folderName)
-		series = append(series, SeriesListItem{Title: seriesTitle, Id: strconv.Itoa(id), FolderName: folderName})
+		_, err = db.Exec(
+			"insert into series_list (id, title, slug) values (?, ?, ?) on conflict do update set id=excluded.id, title=excluded.title, slug=excluded.slug",
+			strconv.Itoa(id), seriesTitle, folderName,
+		)
+		if err != nil {
+			log.Println("Failed to add series to database with error: ", err)
+			log.Printf("Series info... id: %d; Name: %s\n", id, seriesTitle)
+		} else {
+			log.Printf("Found series at %d; Name: %s; Slug: %s\n", id, seriesTitle, folderName)
+		}
+
 		id++
 
 		// Wait n seconds before trying the next id
 		time.Sleep(sleepTime)
 	}
 
-	encodeErr := encoder.Encode(series)
-	if encodeErr != nil {
-		log.Fatal(err)
-	}
 	log.Printf("Finished! Found %d titles.\n", len(series))
 }
 
@@ -432,7 +441,7 @@ func main() {
 	}
 
 	if args.GenListing {
-		buildSeriesList(api)
+		buildSeriesList(db, api)
 	}
 
 	if len(args.AddToWatch) > 0 {
