@@ -176,6 +176,8 @@ func buildSeriesList(db *sql.DB, api api.Api) {
 		log.Fatalln("Failed to query series_list with error: ", err)
 	}
 
+	defer list.Close()
+
 	for list.Next() {
 		var seriesItem SeriesListItem
 		err := list.Scan(&seriesItem.Id, &seriesItem.Title, &seriesItem.FolderName)
@@ -248,14 +250,20 @@ func upsertWatching(db *sql.DB, toWatch []int) {
 	// This isn't an exposed service. If you run it as one, fix this before doing so!
 	query := fmt.Sprintf("select * from series_list where id in (%s)", strings.Join(toWatchStr, ","))
 	items, err := db.Query(query)
+	var itemsScanned []SeriesListItem
 	if err != nil {
 		log.Fatalln("Failed to pull from series_list with error: ", err)
 	}
 
+	defer items.Close()
+
 	for items.Next() {
 		var item SeriesListItem
 		items.Scan(&item.Id, &item.Title, &item.FolderName)
+		itemsScanned = append(itemsScanned, item)
+	}
 
+	for _, item := range itemsScanned {
 		res, err := db.Exec(
 			"insert into watching (id, series_id, title, slug) values (?, ?, ?, ?) on conflict do update set series_id=excluded.series_id",
 			nil, item.Id, item.Title, item.FolderName,
@@ -274,7 +282,9 @@ func upsertWatching(db *sql.DB, toWatch []int) {
 		}
 	}
 
-	log.Println("Some ids were invalid: ", difference(toWatchStr, addedIds))
+	if len(difference(toWatchStr, addedIds)) > 0 {
+		log.Println("Some ids were invalid: ", difference(toWatchStr, addedIds))
+	}
 }
 
 func updateWatchList(db *sql.DB, a api.Api, updateList []int, force bool) {
@@ -303,6 +313,9 @@ func updateWatchList(db *sql.DB, a api.Api, updateList []int, force bool) {
 		}
 	}
 	var watchedMangas []WatchedManga
+
+	defer watchList.Close()
+
 	for watchList.Next() {
 		var watchedManga WatchedManga
 		err := watchList.Scan(&watchedManga.Id, &watchedManga.SeriesId, &watchedManga.Title, &watchedManga.Slug)
@@ -311,7 +324,6 @@ func updateWatchList(db *sql.DB, a api.Api, updateList []int, force bool) {
 		}
 		watchedMangas = append(watchedMangas, watchedManga)
 	}
-	watchList.Close()
 
 MangaLoop:
 	for _, watchedManga := range watchedMangas {
@@ -336,12 +348,13 @@ MangaLoop:
 			log.Fatalf("Failed to get downloaded items for series_id %d with error: %s", watchedManga.SeriesId, err)
 		}
 
+		defer downloadedChapters.Close()
+
 		for downloadedChapters.Next() {
 			var chapter DownloadedChapters
 			downloadedChapters.Scan(&chapter.Id, &chapter.SeriesId, &chapter.WatchingId, &chapter.ChapterLabel)
 			chapters = append(chapters, chapter)
 		}
-		downloadedChapters.Close()
 
 		var toDownload []api.MangaData
 		for _, listing := range listings.Data {
