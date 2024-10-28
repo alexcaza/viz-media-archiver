@@ -428,20 +428,20 @@ func main() {
 		log.Println("Filed to open sqlite database with error: ", err)
 	}
 
+	createStatements := map[string]string{
+		"series_list": "create table if not exists series_list (id integer PRIMARY KEY, title text NOT NULL, slug text NOT NULL)",
+		"watching":    "create table if not exists watching (id integer PRIMARY KEY, series_id integer, title text NOT NULL, slug text NOT NULL, UNIQUE(series_id))",
+		"downloaded":  "create table if not exists downloaded (id integer PRIMARY KEY, watching_id integer NOT NULL, series_id integer NOT NULL, chapter_label text NOT NULL, FOREIGN KEY(watching_id) REFERENCES watching(id), UNIQUE(watching_id, series_id, chapter_label))",
+	}
+
 	defer db.Close()
-	_, err = db.Exec("create table if not exists series_list (id integer PRIMARY KEY, title text NOT NULL, slug text NOT NULL)")
-	if err != nil {
-		log.Println("Failed to create `series_list` table with error:", err)
-	}
 
-	_, err = db.Exec("create table if not exists watching (id integer PRIMARY KEY, series_id integer, title text NOT NULL, slug text NOT NULL, UNIQUE(series_id))")
-	if err != nil {
-		log.Println("Failed to create `watching` table with error:", err)
-	}
-
-	_, err = db.Exec("create table if not exists downloaded (id integer PRIMARY KEY, watching_id integer NOT NULL, series_id integer NOT NULL, chapter_label text NOT NULL, FOREIGN KEY(watching_id) REFERENCES watching(id), UNIQUE(watching_id, series_id, chapter_label))")
-	if err != nil {
-		log.Println("Failed to create `downloaded` table with error:", err)
+	for tableName, statement := range createStatements {
+		_, err = db.Exec(statement)
+		if err != nil {
+			log.Printf("Failed to create table: %s\n", tableName)
+			log.Println("Error: ", err)
+		}
 	}
 
 	if args.GenListing {
