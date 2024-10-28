@@ -282,8 +282,10 @@ func upsertWatching(db *sql.DB, toWatch []int) {
 		}
 	}
 
-	if len(difference(toWatchStr, addedIds)) > 0 {
-		log.Println("Some ids were invalid: ", difference(toWatchStr, addedIds))
+	diff := difference(toWatchStr, addedIds)
+
+	if len(diff) > 0 {
+		log.Println("Some ids were invalid: ", diff)
 	}
 }
 
