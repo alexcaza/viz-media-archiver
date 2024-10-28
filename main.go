@@ -198,6 +198,12 @@ func buildSeriesList(db *sql.DB, api api.Api) {
 	}
 
 	for id < maxId {
+		// Wait n seconds at the top of each loop.
+		// This is to avoid being a bad actor/hitting rate limits.
+		// We call it at the top to avoid forgetting to call it in
+		// lower branches.
+		time.Sleep(sleepTime)
+
 		output, err := api.FetchSeriesChapters(id)
 		if err != nil {
 			log.Fatalln("Failed to fetch series chapters with error: ", err)
@@ -207,8 +213,6 @@ func buildSeriesList(db *sql.DB, api api.Api) {
 			log.Printf("The id %d doesn't exist. Skipping...", id)
 			id++
 
-			// Wait n seconds before trying the next id
-			time.Sleep(sleepTime)
 			continue
 		}
 		data := output.Data
@@ -228,9 +232,6 @@ func buildSeriesList(db *sql.DB, api api.Api) {
 		}
 
 		id++
-
-		// Wait n seconds before trying the next id
-		time.Sleep(sleepTime)
 	}
 
 	log.Printf("Finished! Found %d titles.\n", len(series))
