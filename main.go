@@ -454,6 +454,9 @@ func main() {
 	}
 
 	// Check for updates and download files
-	log.Println("Updating watch list")
-	updateWatchList(db, api, args.UpdateList, args.ForceUpdate)
+	// Only if there are no other args present or an update list is passed
+	if len(args.UpdateList) > 0 || len(os.Args[1:]) < 1 {
+		log.Println("Updating watch list")
+		updateWatchList(db, api, args.UpdateList, args.ForceUpdate)
+	}
 }
