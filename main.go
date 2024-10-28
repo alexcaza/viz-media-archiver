@@ -197,7 +197,7 @@ func buildSeriesList(db *sql.DB, api api.Api) {
 		id = lastSeriesId
 	}
 
-	for id < maxId {
+	for i := id; i < maxId; i++ {
 		// Wait n seconds at the top of each loop.
 		// This is to avoid being a bad actor/hitting rate limits.
 		// We call it at the top to avoid forgetting to call it in
@@ -230,8 +230,6 @@ func buildSeriesList(db *sql.DB, api api.Api) {
 		} else {
 			log.Printf("Found series at %d; Name: %s; Slug: %s\n", id, seriesTitle, folderName)
 		}
-
-		id++
 	}
 
 	log.Printf("Finished! Found %d titles.\n", len(series))
