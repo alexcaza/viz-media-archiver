@@ -161,15 +161,19 @@ func fetchZip(zipLocation string, folderName string, chapterId string) bool {
 func buildSeriesList(db *sql.DB, api api.Api) {
 	log.Println("Starting to fetch.")
 
+	id := 1
+	sleepTime := 1 * time.Second
+	var series []SeriesListItem
+
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Println("Failed to open .env with error: ", err)
 	}
 
-	maxId, _ := strconv.Atoi(os.Getenv("MAX_ID"))
-	id := 1
-	sleepTime := 1 * time.Second
-	var series []SeriesListItem
+	maxId, err := strconv.Atoi(os.Getenv("MAX_ID"))
+	if err != nil {
+		log.Println("MAX_ID is missing! Please add it to your environment")
+	}
 
 	list, err := db.Query("select * from series_list order by id asc")
 	if err != nil {
